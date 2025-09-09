@@ -70,6 +70,18 @@
                     </template>
                     我的愿望单
                   </a-menu-item>
+                  <a-menu-item key="wallet" @click="toWallet">
+                    <template #icon>
+                      <WalletOutlined />
+                    </template>
+                    我的钱包
+                  </a-menu-item>
+                  <a-menu-item key="orders" @click="toOrders">
+                    <template #icon>
+                      <ShoppingCartOutlined />
+                    </template>
+                    我的订单
+                  </a-menu-item>
                   <a-menu-divider
                     v-if="loginUserStore.loginUser?.userIsAdmin === 1"
                   />
@@ -207,6 +219,20 @@
                   <span>我的愿望单</span>
                 </div>
                 <div
+                  class="mobile-menu-item"
+                  @click="handleMobileMenuClick(toWallet)"
+                >
+                  <WalletOutlined />
+                  <span>我的钱包</span>
+                </div>
+                <div
+                  class="mobile-menu-item"
+                  @click="handleMobileMenuClick(toOrders)"
+                >
+                  <ShoppingCartOutlined />
+                  <span>我的订单</span>
+                </div>
+                <div
                   v-if="loginUserStore.loginUser?.userIsAdmin === 1"
                   class="mobile-menu-item"
                   @click="handleMobileMenuClick(toAdmin)"
@@ -262,6 +288,8 @@ import {
   LogoutOutlined,
   UserOutlined,
   HeartOutlined,
+  WalletOutlined,
+  ShoppingCartOutlined,
   SettingOutlined,
   HomeOutlined,
   ShoppingOutlined,
@@ -333,6 +361,14 @@ const toChat = () => {
 
 const toWishlist = () => {
   router.push("/wishlist");
+};
+
+const toWallet = () => {
+  router.push("/wallet");
+};
+
+const toOrders = () => {
+  router.push("/orders");
 };
 
 const toAdmin = () => {

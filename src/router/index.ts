@@ -143,6 +143,22 @@ const routes: Array<RouteRecordRaw> = [
     },
   },
   {
+    path: "/wallet",
+    name: "WalletPage",
+    component: () => import("@/pages/user/WalletPage.vue"),
+    meta: {
+      title: "我的钱包",
+    },
+  },
+  {
+    path: "/orders",
+    name: "OrderPage",
+    component: () => import("@/pages/user/OrderPage.vue"),
+    meta: {
+      title: "我的订单",
+    },
+  },
+  {
     path: "/403",
     name: "Exception403",
     component: () => import("@/pages/exception/403.vue"),
