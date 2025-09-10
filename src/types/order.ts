@@ -65,16 +65,20 @@ export enum PaymentMethod {
 }
 
 // 订单状态显示映射
-export const ORDER_STATUS_MAP = {
-  [OrderStatus.PENDING]: { text: "待支付", color: "orange" },
-  [OrderStatus.PAID]: { text: "已支付", color: "green" },
-  [OrderStatus.CANCELLED]: { text: "已取消", color: "gray" },
-  [OrderStatus.REFUNDED]: { text: "已退款", color: "red" },
-  [OrderStatus.DELIVERED]: { text: "已发货", color: "blue" },
-};
+export const ORDER_STATUS_MAP: Record<number, { text: string; color: string }> =
+  {
+    [OrderStatus.PENDING]: { text: "待支付", color: "orange" },
+    [OrderStatus.PAID]: { text: "已支付", color: "green" },
+    [OrderStatus.CANCELLED]: { text: "已取消", color: "gray" },
+    [OrderStatus.REFUNDED]: { text: "已退款", color: "red" },
+    [OrderStatus.DELIVERED]: { text: "已发货", color: "blue" },
+  };
 
 // 支付方式显示映射
-export const PAYMENT_METHOD_MAP = {
+export const PAYMENT_METHOD_MAP: Record<
+  string,
+  { text: string; icon: string }
+> = {
   [PaymentMethod.ALIPAY]: { text: "支付宝", icon: "alipay" },
   [PaymentMethod.WECHAT]: { text: "微信支付", icon: "wechat" },
   [PaymentMethod.BANK_CARD]: { text: "银行卡", icon: "credit-card" },

@@ -22,8 +22,8 @@
       </div>
 
       <div class="wallet-actions">
-        <a-button 
-          type="primary" 
+        <a-button
+          type="primary"
           @click="showRechargeModal"
           :disabled="walletInfo.walletStatus !== 1"
         >
@@ -66,11 +66,20 @@
         <a-range-picker
           v-model:value="dateRange"
           style="width: 240px; margin-left: 8px"
-          placeholder="['开始日期', '结束日期']"
-        />
-        <a-button style="margin-left: 8px" @click="loadTransactions"
-          >查询</a-button
+          :placeholder="['开始日期', '结束日期']"
         >
+          <template #suffixIcon>
+            <calendar-outlined />
+          </template>
+        </a-range-picker>
+        <a-button 
+          type="primary" 
+          style="height: 32px; margin-left: 8px"
+          @click="loadTransactions"
+        >
+          <search-outlined />
+          搜索
+        </a-button>
       </div>
 
       <a-table
@@ -82,38 +91,45 @@
         rowKey="transactionId"
       >
         <template #bodyCell="{ column, record }">
+          <!-- 交易类型 -->
           <template v-if="column.key === 'transactionType'">
             <a-tag :color="getTransactionTypeColor(record.transactionType)">
               {{ getTransactionTypeName(record.transactionType) }}
             </a-tag>
           </template>
+          <!-- 交易金额 -->
           <template v-if="column.key === 'transactionAmount'">
             <span
               :class="
-                record.transactionAmount > 0
+                [1, 3].includes(record.transactionType)
                   ? 'amount-income'
                   : 'amount-expense'
               "
             >
-              {{ record.transactionAmount > 0 ? "+" : "" }}¥{{
+              {{ [1, 3].includes(record.transactionType) ? "+" : "-" }}¥{{
                 Math.abs(record.transactionAmount).toFixed(2)
               }}
             </span>
           </template>
+          <!-- 账户余额 -->
           <template v-if="column.key === 'balanceAfter'">
             <span>¥{{ record.balanceAfter?.toFixed(2) || "0.00" }}</span>
           </template>
+          <!-- 交易状态 -->
           <template v-if="column.key === 'transactionStatus'">
             <a-tag :color="getTransactionStatusColor(record.transactionStatus)">
               {{ getTransactionStatusName(record.transactionStatus) }}
             </a-tag>
           </template>
+          <!-- 支付方式 -->
           <template v-if="column.key === 'paymentMethod'">
-            <span>{{ record.paymentMethod || "-" }}</span>
+            <span>{{ getPaymentMethodName(record.paymentMethod) || "-" }}</span>
           </template>
+          <!-- 交易描述 -->
           <template v-if="column.key === 'transactionDescription'">
             <span>{{ record.transactionDescription || "-" }}</span>
           </template>
+          <!-- 交易时间 -->
           <template v-if="column.key === 'createdTime'">
             <span>{{ formatDateTime(record.createdTime) || "-" }}</span>
           </template>
@@ -207,6 +223,8 @@ import {
   SwapOutlined,
   LockOutlined,
   UnlockOutlined,
+  SearchOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons-vue";
 import {
   WalletAPI,
@@ -327,8 +345,29 @@ const loadTransactions = async () => {
       pageSize: pagination.pageSize,
     });
     if (response.data && response.data.data) {
-      transactions.value = response.data.data;
-      pagination.total = response.data.data.length;
+      let filteredTransactions = response.data.data;
+
+      // 前端筛选：按交易类型
+      if (filterType.value !== undefined && filterType.value !== null) {
+        filteredTransactions = filteredTransactions.filter(
+          (transaction) => transaction.transactionType === filterType.value
+        );
+      }
+
+      // 前端筛选：按日期范围
+      if (dateRange.value && dateRange.value.length === 2) {
+        const startDate = new Date(dateRange.value[0]);
+        const endDate = new Date(dateRange.value[1]);
+        endDate.setHours(23, 59, 59, 999); // 包含结束日期的整天
+
+        filteredTransactions = filteredTransactions.filter((transaction) => {
+          const transactionDate = new Date(transaction.createdTime);
+          return transactionDate >= startDate && transactionDate <= endDate;
+        });
+      }
+
+      transactions.value = filteredTransactions;
+      pagination.total = filteredTransactions.length;
     }
   } catch (error) {
     message.error("获取交易记录失败");
@@ -478,21 +517,33 @@ const getTransactionStatusColor = (status: number) => {
   return map[status] || "default";
 };
 
+// 获取支付方式中文名称
+const getPaymentMethodName = (method: string) => {
+  const map: Record<string, string> = {
+    WALLET: "钱包余额",
+    REFUND: "退款",
+    ALIPAY: "支付宝",
+    WECHAT: "微信支付",
+    BANK_CARD: "银行卡",
+  };
+  return map[method] || method;
+};
+
 // 格式化日期时间
 const formatDateTime = (dateTime?: string) => {
   if (!dateTime) return "";
-  
+
   try {
     const date = new Date(dateTime);
     if (isNaN(date.getTime())) return dateTime;
-    
+
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   } catch (error) {
     return dateTime;
@@ -565,6 +616,19 @@ onMounted(() => {
   margin-bottom: 16px;
   display: flex;
   align-items: center;
+}
+
+.transactions-filter .ant-select,
+.transactions-filter .ant-picker-range {
+  height: 32px;
+}
+
+.transactions-filter .ant-btn {
+  height: 32px !important;
+  min-height: 32px !important;
+  line-height: 30px !important;
+  padding: 0 12px !important;
+  border-width: 1px !important;
 }
 
 .amount-income {

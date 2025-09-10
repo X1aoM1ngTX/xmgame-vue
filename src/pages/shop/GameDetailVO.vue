@@ -247,6 +247,45 @@
         </div>
       </div>
     </div>
+
+    <!-- 支付确认Modal -->
+    <a-modal
+      v-model:open="showPaymentModal"
+      :title="currentOrder?.finalPrice === 0 ? '确认领取' : '确认支付'"
+      :confirmLoading="orderLoading"
+      @ok="confirmPayment"
+      @cancel="cancelPayment"
+      :okText="currentOrder?.finalPrice === 0 ? '确认领取' : '确认支付'"
+      cancelText="取消"
+    >
+      <div v-if="currentOrder" class="payment-modal-content">
+        <div class="payment-info">
+          <h4>订单信息</h4>
+          <p><strong>游戏名称：</strong>{{ game?.gameName }}</p>
+          <p><strong>订单编号：</strong>{{ currentOrder.orderNo }}</p>
+          <p>
+            <strong>支付金额：</strong>
+            <span class="payment-amount">￥{{ currentOrder.finalPrice }}</span>
+          </p>
+          <p>
+            <strong>支付方式：</strong
+            >{{ currentOrder.finalPrice === 0 ? "免费领取" : "钱包余额" }}
+          </p>
+        </div>
+        <div class="payment-warning">
+          <a-alert
+            message="支付确认"
+            :description="
+              currentOrder.finalPrice === 0
+                ? '确认后，游戏将立即添加到您的游戏库。'
+                : '确认支付后，将从您的钱包余额中扣除相应金额，游戏将立即添加到您的游戏库。'
+            "
+            type="info"
+            show-icon
+          />
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -265,8 +304,9 @@ import {
   type GameDetailVO,
   getGameDetail,
   getGameOnlineCount,
-  userBuyGame,
+  createPurchaseOrder,
 } from "@/api/game";
+import { OrderAPI, type OrderVO } from "@/api/order";
 import { message } from "ant-design-vue";
 import {
   HeartFilled,
@@ -298,6 +338,8 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 // 用户游戏库
 const userLibraryStore = useUserLibraryStore();
+// 游戏拥有状态
+const isOwned = ref(false);
 // 登录用户库
 const loginUserStore = useLoginUserStore();
 
@@ -305,6 +347,11 @@ const loginUserStore = useLoginUserStore();
 const isInWishlist = ref(false);
 const wishlistLoading = ref(false);
 const wishlistGames = ref<number[]>([]);
+
+// 订单相关
+const currentOrder = ref<OrderVO | null>(null);
+const orderLoading = ref(false);
+const showPaymentModal = ref(false);
 
 // 倒计时相关
 const countdown = ref("");
@@ -372,7 +419,7 @@ const fetchOnlineCount = async () => {
   if (!game.value?.gameId) return;
 
   try {
-    const res = await getGameOnlineCount(game.value.gameId);
+    const res = (await getGameOnlineCount(game.value.gameId)) as any;
     if (res.data.code === 0) {
       onlineCount.value = res.data.data;
     } else {
@@ -468,7 +515,7 @@ const handleButtonClick = async () => {
     return;
   }
 
-  // 未拥有，才请求后端
+  // 未拥有，检查库存和状态
   if (game.value.gameStock <= 0) {
     message.warning("该游戏已售罄");
     return;
@@ -478,28 +525,159 @@ const handleButtonClick = async () => {
     return;
   }
 
+  // 创建订单
+  await createOrder();
+};
+
+// 创建订单
+const createOrder = async () => {
+  if (!game.value || !loginUserStore.hasLogin) {
+    message.warning("请先登录");
+    return;
+  }
+
+  // 检查是否已有未支付的订单
+  if (currentOrder.value) {
+    message.warning("您有一个待支付的订单，请先完成支付或取消");
+    return;
+  }
+
+  orderLoading.value = true;
   try {
-    const res = (await userBuyGame(game.value.gameId)) as unknown as {
-      data: ApiResponse<any>;
-    };
+    console.log("🚀 开始创建订单 - 游戏ID:", game.value.gameId);
+    const res = (await createPurchaseOrder(game.value.gameId)) as any;
+    console.log("📨 收到创建订单响应:", JSON.stringify(res, null, 2));
+
     if (res.data.code === 0) {
-      message.success("游戏已成功添加到您的游戏库");
-      (userLibraryStore.games as UserGameItem[]).push(
-        game.value as UserGameItem
-      );
+      console.log("✅ 订单创建成功 - 订单信息:", res.data.data);
+      currentOrder.value = res.data.data;
+      // 显示支付确认页面（包括免费游戏）
+      showPaymentModal.value = true;
+      if (currentOrder.value.finalPrice === 0) {
+        message.info("请确认领取免费游戏");
+      } else {
+        message.info("订单创建成功，请在10分钟内完成支付");
+      }
     } else if (
       res.data.code === 40000 &&
-      res.data.description.includes("已拥有")
+      res.data.description?.includes("已拥有")
     ) {
-      // 后端返回已拥有
+      console.log("ℹ️ 用户已拥有该游戏");
       message.info("你已拥有该游戏");
     } else {
-      message.error(res.data.description || "添加游戏失败");
+      console.log(
+        "❌ 订单创建失败 - 响应码:",
+        res.data.code,
+        "描述:",
+        res.data.description
+      );
+      message.error(res.data.description || "创建订单失败");
     }
   } catch (error: unknown) {
+    console.log("💥 创建订单异常:", error);
     const err = error as { description?: string };
-    message.error(`操作失败: ${err.description || "未知错误"}`);
+    message.error(`创建订单失败: ${err.description || "未知错误"}`);
+  } finally {
+    orderLoading.value = false;
   }
+};
+
+// 确认支付
+const confirmPayment = async () => {
+  if (!currentOrder.value) return;
+
+  console.log(
+    "🚀 开始支付流程 - 订单ID:",
+    currentOrder.value.orderId,
+    "订单号:",
+    currentOrder.value.orderNo
+  );
+  console.log("🚀 当前订单信息:", JSON.stringify(currentOrder.value, null, 2));
+
+  orderLoading.value = true;
+  try {
+    console.log("📡 发送支付请求...");
+    // 判断支付方式：免费游戏使用"FREE"，其他使用"WALLET"
+    const paymentMethod =
+      currentOrder.value.finalPrice === 0 ? "FREE" : "WALLET";
+    console.log("💰 使用支付方式:", paymentMethod);
+    const res = (await OrderAPI.payOrder(
+      currentOrder.value.orderId,
+      paymentMethod
+    )) as any;
+
+    console.log("📨 收到支付响应:", JSON.stringify(res, null, 2));
+    console.log("📊 响应码:", res.data.code);
+    console.log("📝 响应描述:", res.data.description);
+    console.log("💾 响应数据:", res.data.data);
+
+    if (res.data.code === 0) {
+      console.log("✅ 支付成功 - 开始处理后续逻辑");
+      message.success("支付成功！游戏已添加到您的游戏库");
+      showPaymentModal.value = false;
+
+      console.log("🔄 刷新用户游戏库...");
+      await userLibraryStore.fetchUserLibrary();
+      console.log("✅ 游戏库刷新完成");
+
+      // 重置订单状态
+      currentOrder.value = null;
+      console.log("🔄 订单状态已重置");
+    } else {
+      console.log(
+        "❌ 支付失败 - 响应码不为0:",
+        res.data.code,
+        "描述:",
+        res.data.description
+      );
+      message.error(res.data.description || "支付失败");
+    }
+  } catch (error: unknown) {
+    console.log("💥 支付过程发生异常:", error);
+
+    const err = error as { description?: string; code?: number; data?: any };
+    console.log("💥 错误详情:", {
+      description: err.description,
+      code: err.code,
+      data: err.data,
+      message: (error as any).message,
+      stack: (error as any).stack,
+    });
+
+    // 检查是否是重复支付或其他已知问题
+    const errorMsg = err.description || JSON.stringify(error);
+    console.log("🔍 错误信息分析:", errorMsg);
+
+    if (
+      errorMsg.includes("已支付") ||
+      errorMsg.includes("重复") ||
+      errorMsg.includes("操作失败")
+    ) {
+      console.log("⚠️ 检测到可能的重复支付或操作失败 - 执行恢复逻辑");
+      message.warning("订单可能已经支付成功，请刷新页面查看");
+
+      // 刷新用户游戏库
+      console.log("🔄 异常情况下刷新用户游戏库...");
+      await userLibraryStore.fetchUserLibrary();
+      console.log("✅ 异常情况下游戏库刷新完成");
+
+      showPaymentModal.value = false;
+      currentOrder.value = null;
+      console.log("🔄 异常情况下订单状态已重置");
+    } else {
+      console.log("❌ 未知支付错误 - 显示错误信息");
+      message.error(`支付失败: ${err.description || "未知错误"}`);
+    }
+  } finally {
+    orderLoading.value = false;
+    console.log("🏁 支付流程结束 - loading状态已重置");
+  }
+};
+
+// 取消支付
+const cancelPayment = () => {
+  showPaymentModal.value = false;
+  currentOrder.value = null;
 };
 
 // 评论相关数据
@@ -1417,5 +1595,51 @@ const handleBack = () => {
   margin-top: 16px;
   display: flex;
   gap: 16px;
+}
+
+/* 支付Modal样式 */
+.payment-modal-content {
+  padding: 16px 0;
+}
+
+.payment-info {
+  margin-bottom: 20px;
+}
+
+.payment-info h4 {
+  margin-bottom: 16px;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.payment-info p {
+  margin-bottom: 8px;
+  color: #666;
+  line-height: 1.5;
+}
+
+.payment-info strong {
+  color: #333;
+  font-weight: 500;
+}
+
+.payment-amount {
+  color: #f5222d;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.payment-warning {
+  margin-top: 20px;
+}
+
+.payment-warning :deep(.ant-alert) {
+  border-radius: 8px;
+}
+
+.payment-warning :deep(.ant-alert-info) {
+  background-color: #e6f7ff;
+  border-color: #91d5ff;
 }
 </style>

@@ -123,8 +123,17 @@ export const getGameDetail = (gameId: string | number) => {
 };
 
 /**
- * 用户购买游戏
+ * 用户购买游戏 - 创建订单
  * @param gameId 游戏ID
+ */
+export const createPurchaseOrder = (gameId: string | number) => {
+  return myAxios.post("/api/game/purchase", { gameId });
+};
+
+/**
+ * 用户购买游戏（旧方法，保留兼容性）
+ * @param gameId 游戏ID
+ * @deprecated 请使用 createPurchaseOrder 替代
  */
 export const userBuyGame = (gameId: string | number) => {
   return myAxios.post("/api/game/purchase", { gameId });

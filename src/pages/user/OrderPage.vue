@@ -66,18 +66,25 @@
           <a-select-option :value="4">已退款</a-select-option>
           <a-select-option :value="5">已发货</a-select-option>
         </a-select>
-        <a-input-search
+        <a-input
           v-model:value="searchKeyword"
           placeholder="搜索订单号或游戏名称"
           style="width: 240px; margin-left: 8px"
-          @search="loadOrders"
         />
         <a-range-picker
           v-model:value="dateRange"
           style="width: 240px; margin-left: 8px"
-          placeholder="['开始日期', '结束日期']"
-        />
-        <a-button style="margin-left: 8px" @click="loadOrders">查询</a-button>
+          :placeholder="['开始日期', '结束日期']"
+        >
+        </a-range-picker>
+        <a-button
+          type="primary"
+          style="height: 32px; margin-left: 8px"
+          @click="loadOrders"
+        >
+          <search-outlined />
+          搜索
+        </a-button>
       </div>
 
       <a-table
@@ -89,19 +96,63 @@
         rowKey="orderId"
       >
         <template #bodyCell="{ column, record }">
+          <!-- 订单号 -->
+          <template v-if="column.key === 'orderNo'">
+            <a-tooltip :title="record.orderNo">
+              <a
+                style="
+                  font-weight: 500;
+                  color: #000;
+                  white-space: nowrap;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  display: block;
+                "
+                @click="copyOrderNo(record.orderNo)"
+              >
+                {{ record.orderNo }}
+              </a>
+            </a-tooltip>
+          </template>
+          <!-- 游戏名称 -->
+          <template v-if="column.key === 'gameName'">
+            <a-tooltip :title="record.gameName">
+              <a
+                style="
+                  color: #000;
+                  font-weight: 500;
+                  white-space: nowrap;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  display: block;
+                "
+                @click="viewGameDetail(record.gameId)"
+              >
+                {{ record.gameName }}
+              </a>
+            </a-tooltip>
+          </template>
+          <!-- 订单状态 -->
           <template v-if="column.key === 'orderStatus'">
             <a-tag :color="getOrderStatusColor(record.orderStatus)">
               {{ getOrderStatusText(record.orderStatus) }}
             </a-tag>
           </template>
+          <!-- 金额 -->
           <template v-if="column.key === 'finalPrice'">
             <span class="order-price"
               >¥{{ record.finalPrice?.toFixed(2) || "0.00" }}</span
             >
           </template>
+          <!-- 支付方式 -->
           <template v-if="column.key === 'paymentMethod'">
             <span>{{ getPaymentMethodText(record.paymentMethod) || "-" }}</span>
           </template>
+          <!-- 创建时间 -->
+          <template v-if="column.key === 'createdTime'">
+            <span>{{ formatDateTime(record.createdTime) }}</span>
+          </template>
+          <!-- 操作 -->
           <template v-if="column.key === 'action'">
             <div class="action-buttons">
               <a-button
@@ -263,7 +314,7 @@
           </div>
           <div class="detail-item">
             <span class="label">创建时间：</span>
-            <span>{{ currentOrder.createdTime }}</span>
+            <span>{{ formatDateTime(currentOrder.createdTime) }}</span>
           </div>
         </div>
 
@@ -295,7 +346,7 @@
           </div>
           <div class="detail-item">
             <span class="label">支付时间：</span>
-            <span>{{ currentOrder.paymentTime || "-" }}</span>
+            <span>{{ formatDateTime(currentOrder.paymentTime) }}</span>
           </div>
         </div>
 
@@ -325,16 +376,20 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   CarOutlined,
   CloseCircleOutlined,
+  SearchOutlined,
 } from "@ant-design/icons-vue";
 import { OrderAPI, type OrderVO } from "@/api/order";
 import type { TableProps } from "ant-design-vue";
-import { ORDER_STATUS_MAP, PAYMENT_METHOD_MAP } from "@/types/order";
+import { ORDER_STATUS_MAP } from "@/types/order";
+
+const router = useRouter();
 
 // 订单统计
 const orderStats = reactive({
@@ -398,11 +453,13 @@ const columns = [
   {
     title: "订单号",
     key: "orderNo",
-    width: 180,
+    width: 220,
+    ellipsis: true,
   },
   {
     title: "游戏名称",
     key: "gameName",
+    width: 200,
     ellipsis: true,
   },
   {
@@ -424,6 +481,7 @@ const columns = [
     title: "创建时间",
     key: "createdTime",
     width: 180,
+    customRender: ({ text }) => formatDateTime(text),
   },
   {
     title: "操作",
@@ -439,7 +497,34 @@ const loadOrders = async () => {
   try {
     const response = await OrderAPI.getUserOrders();
     if (response.data && response.data.data) {
-      orders.value = response.data.data;
+      let filteredOrders = response.data.data;
+      // 前端筛选：按状态
+      if (filterStatus.value !== undefined && filterStatus.value !== null) {
+        filteredOrders = filteredOrders.filter(
+          (order) => order.orderStatus === filterStatus.value
+        );
+      }
+      // 前端筛选：按关键词搜索（订单号或游戏名称）
+      if (searchKeyword.value.trim()) {
+        const keyword = searchKeyword.value.trim().toLowerCase();
+        filteredOrders = filteredOrders.filter(
+          (order) =>
+            order.orderNo.toLowerCase().includes(keyword) ||
+            (order.gameName && order.gameName.toLowerCase().includes(keyword))
+        );
+      }
+      // 前端筛选：按日期范围
+      if (dateRange.value && dateRange.value.length === 2) {
+        const startDate = new Date(dateRange.value[0]);
+        const endDate = new Date(dateRange.value[1]);
+        endDate.setHours(23, 59, 59, 999); // 包含结束日期的整天
+        filteredOrders = filteredOrders.filter((order) => {
+          const orderDate = new Date(order.createdTime);
+          return orderDate >= startDate && orderDate <= endDate;
+        });
+      }
+      orders.value = filteredOrders;
+      pagination.total = filteredOrders.length;
       calculateOrderStats();
     }
   } catch (error) {
@@ -601,9 +686,80 @@ const getOrderStatusColor = (status: number) => {
   return ORDER_STATUS_MAP[status]?.color || "default";
 };
 
+// 获取支付方式中文名称
+const getPaymentMethodName = (method: string) => {
+  if (!method) return "-";
+  const map: Record<string, string> = {
+    WALLET: "钱包余额",
+    REFUND: "退款",
+    ALIPAY: "支付宝",
+    WECHAT: "微信支付",
+    BANK_CARD: "银行卡",
+    FREE: "免费",
+  };
+  return map[method.toUpperCase()] || method;
+};
+
 // 获取支付方式文本
 const getPaymentMethodText = (method?: string) => {
-  return method ? PAYMENT_METHOD_MAP[method]?.text || method : "-";
+  return method ? getPaymentMethodName(method) : "-";
+};
+
+// 复制订单号
+const copyOrderNo = async (orderNo: string) => {
+  if (!orderNo) {
+    message.warning("订单号不存在");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(orderNo);
+    message.success("订单号已复制到剪贴板");
+  } catch (error) {
+    // 降级方案：使用 document.execCommand
+    const textArea = document.createElement("textarea");
+    textArea.value = orderNo;
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+      document.execCommand("copy");
+      message.success("订单号已复制到剪贴板");
+    } catch (err) {
+      message.error("复制失败，请手动复制");
+    }
+    document.body.removeChild(textArea);
+  }
+};
+
+// 查看游戏详情
+const viewGameDetail = (gameId: number) => {
+  if (!gameId) {
+    message.warning("游戏ID不存在");
+    return;
+  }
+  // 使用路由导航到游戏详情页面
+  router.push(`/game/${gameId}`);
+};
+
+// 格式化日期时间
+const formatDateTime = (dateTime?: string) => {
+  if (!dateTime) return "-";
+
+  try {
+    const date = new Date(dateTime);
+    if (isNaN(date.getTime())) return dateTime;
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  } catch (error) {
+    return dateTime;
+  }
 };
 
 onMounted(() => {
@@ -683,6 +839,21 @@ onMounted(() => {
   margin-bottom: 16px;
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.order-filter .ant-select,
+.order-filter .ant-input,
+.order-filter .ant-picker-range {
+  height: 32px;
+}
+
+.order-filter .ant-btn {
+  height: 32px !important;
+  min-height: 32px !important;
+  line-height: 30px !important;
+  padding: 0 12px !important;
+  border-width: 1px !important;
 }
 
 .order-price {

@@ -21,6 +21,16 @@ myAxios.interceptors.request.use(
 // 响应拦截器
 myAxios.interceptors.response.use(
   (response) => {
+    // 如果后端返回的是标准格式 {code, data, message, description}，直接返回 response.data
+    // 否则返回 response.data
+    const responseData = response.data;
+    if (
+      responseData &&
+      typeof responseData === "object" &&
+      "code" in responseData
+    ) {
+      return responseData;
+    }
     return response.data;
   },
   (error) => {

@@ -86,6 +86,9 @@
                   {{ getTransactionStatusName(transaction.transactionStatus) }}
                 </a-tag>
               </div>
+              <div class="transaction-payment" v-if="transaction.paymentMethod">
+                {{ getPaymentMethodName(transaction.paymentMethod) }}
+              </div>
             </div>
           </div>
         </div>
@@ -224,6 +227,18 @@ const getTransactionStatusName = (status: number) => {
     2: "失败",
   };
   return map[status] || "未知";
+};
+
+// 获取支付方式中文名称
+const getPaymentMethodName = (method: string) => {
+  const map: Record<string, string> = {
+    alipay: "支付宝",
+    wechat: "微信支付",
+    bank_card: "银行卡",
+    wallet: "钱包余额",
+    WALLET: "钱包余额",
+  };
+  return map[method] || method;
 };
 
 // 获取交易状态颜色
@@ -411,6 +426,12 @@ onMounted(() => {
 }
 
 .transaction-status {
+  margin-bottom: 4px;
+}
+
+.transaction-payment {
+  font-size: 12px;
+  color: #666;
   margin-bottom: 4px;
 }
 
