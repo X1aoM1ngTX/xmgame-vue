@@ -54,7 +54,7 @@
                   </a-menu-item>
                   <a-menu-item key="friends" @click="toFirends">
                     <template #icon>
-                      <UserOutlined />
+                      <TeamOutlined />
                     </template>
                     我的好友
                   </a-menu-item>

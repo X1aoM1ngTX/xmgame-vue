@@ -72,8 +72,8 @@
             <calendar-outlined />
           </template>
         </a-range-picker>
-        <a-button 
-          type="primary" 
+        <a-button
+          type="primary"
           style="height: 32px; margin-left: 8px"
           @click="loadTransactions"
         >
